@@ -1,81 +1,240 @@
-import pygame
 import random
-import numpy as np
+from collections import namedtuple
+from enum import Enum
+import pygame
+
+WHITE = (255, 255, 255)
+BLACK = (0, 0, 0)
+RED = (255, 0, 0)
+GREEN = (0, 255, 0)
+BLUE = (0, 0, 255)
+LIGHTBLUE = (2, 128, 196)
+YELLOW = (255, 255, 0)
+ORANGE = (255, 165, 0)
+
+Point = namedtuple('Point', 'x, y')
+
+BLOCK_SIZE = 20
+
+class Direction(Enum):
+    RIGHT = 1
+    LEFT = 2
+    UP = 3
+    DOWN = 4
+
+def exit_game():
+    pygame.quit()
 
 class SnakeGame:
-    def __init__(self, width=440, height=440):
-        self.width = width
-        self.height = height
-        self.reset()
+    def __init__(self, render=False, w=640, h=480):
+        self.render = render
+        self.snake = None
+        self.w = w
+        self.h = h
+
+        self.score = 0
+        self.speed = 5
 
     def reset(self):
-        self.snake = [(100, 100), (90, 100), (80, 100)]
-        self.snake_dir = (10, 0)
-        self.food = self.spawn_food()
-        self.score = 0
-        self.game_over = False
-        return self.get_state()
+        if self.render:
+            pygame.init()
+            self.display = pygame.display.set_mode((self.w, self.h))
+            self.display.fill(BLACK)
+            pygame.display.update()
+            pygame.display.set_caption('Snake Game')
 
-    def spawn_food(self):
-        return (random.randint(0, (self.width - 10) // 10) * 10,
-                random.randint(0, (self.height - 10) // 10) * 10)
+            self.clock = pygame.time.Clock()
+
+        self.direction = Direction.RIGHT
+        self.head = Point(self.w/2, self.h/2)
+        # Snake length is 3 blocks
+        self.snake = [self.head,
+                      Point(self.head.x - BLOCK_SIZE, self.head.y),
+                      Point(self.head.x - (2*BLOCK_SIZE), self.head.y)]
+        self.food = None
+        self.score = 0
+        self.steps_without_food = 0
+        self._spawn_food()
+
+    def _spawn_food(self):
+        while True:
+            x = round(random.randrange(0, self.w - BLOCK_SIZE) / BLOCK_SIZE) * BLOCK_SIZE
+            y = round(random.randrange(0, self.h - BLOCK_SIZE) / BLOCK_SIZE) * BLOCK_SIZE
+            food = Point(x, y)
+            if food not in self.snake:
+                self.food = food
+                return
 
     def get_state(self):
-        head_x, head_y = self.snake[0]
-        food_x, food_y = self.food
+        pt_l = Point(self.head.x - BLOCK_SIZE, self.head.y)
+        pt_r = Point(self.head.x + BLOCK_SIZE, self.head.y)
+        pt_u = Point(self.head.x, self.head.y - BLOCK_SIZE)
+        pt_d = Point(self.head.x, self.head.y + BLOCK_SIZE)
 
-        # Distance from food
-        food_dist = (food_x - head_x, food_y - head_y)
+        direction_l = self.direction == Direction.LEFT
+        direction_r = self.direction == Direction.RIGHT
+        direction_u = self.direction == Direction.UP
+        direction_d = self.direction == Direction.DOWN
 
-        # Direction the snake is moving
-        snake_dir = self.snake_dir
+        snake_obstacles = [
+            # Straight
+            (pt_l and self._snake_is_collision(pt_l)) or
+            (pt_r and self._snake_is_collision(pt_r)) or
+            (pt_u and self._snake_is_collision(pt_u)) or
+            (pt_d and self._snake_is_collision(pt_d)),
 
-        # Snake body proximity
-        body_collision = [0, 0, 0, 0]  # top, right, bottom, left
+            # Right
+            (pt_l and self._snake_is_collision(pt_u)) or
+            (pt_r and self._snake_is_collision(pt_d)) or
+            (pt_u and self._snake_is_collision(pt_r)) or
+            (pt_d and self._snake_is_collision(pt_l)),
 
-        for body_part in self.snake[1:]:
-            if body_part == (head_x, head_y - 10):  # Up
-                body_collision[0] = 1
-            elif body_part == (head_x + 10, head_y):  # Right
-                body_collision[1] = 1
-            elif body_part == (head_x, head_y + 10):  # Down
-                body_collision[2] = 1
-            elif body_part == (head_x - 10, head_y):  # Left
-                body_collision[3] = 1
+            # Left
+            (pt_l and self._snake_is_collision(pt_d)) or
+            (pt_r and self._snake_is_collision(pt_u)) or
+            (pt_u and self._snake_is_collision(pt_l)) or
+            (pt_d and self._snake_is_collision(pt_r))
+        ]
 
-        state = np.array(snake_dir + food_dist + tuple(body_collision))
-        return state
+        edge_obstacles = [
+            # Straight
+            (pt_l and self._edge_is_collision(pt_l)) or
+            (pt_r and self._edge_is_collision(pt_r)) or
+            (pt_u and self._edge_is_collision(pt_u)) or
+            (pt_d and self._edge_is_collision(pt_d)),
+
+            # Right
+            (pt_l and self._edge_is_collision(pt_u)) or
+            (pt_r and self._edge_is_collision(pt_d)) or
+            (pt_u and self._edge_is_collision(pt_r)) or
+            (pt_d and self._edge_is_collision(pt_l)),
+
+            # Left
+            (pt_l and self._edge_is_collision(pt_d)) or
+            (pt_r and self._edge_is_collision(pt_u)) or
+            (pt_u and self._edge_is_collision(pt_l)) or
+            (pt_d and self._edge_is_collision(pt_r))
+        ]
+
+        direction = [direction_r, direction_d, direction_l, direction_u]
+
+        food_location = [
+            self.head.x < self.food.x,
+            self.head.y < self.food.y,
+            self.head.x > self.food.x,
+            self.head.y > self.food.y
+        ]
+
+        state = snake_obstacles + direction + food_location + edge_obstacles
+        return tuple(state)
+
+    def _snake_is_collision(self, point):
+        # Condition to check if snake has bitten its body
+        if point in self.snake[1:]:
+            return True
+        return False
+
+    def _edge_is_collision(self, point):
+        # Condition to check if snake has hit the wall
+        if point.x < 0 or point.y < 0 or point.x >= self.w or point.y >= self.h:
+            return True
+
+        return False
+
+    def _is_collision(self, point):
+        # Condition to check if snake has bitten its body
+        if point in self.snake[1:]:
+            return True
+
+        # Condition to check if snake has hit the wall
+        if point.x < 0 or point.y < 0 or point.x >= self.w or point.y >= self.h:
+            return True
+
+        return False
+
+    def _update_frame(self):
+        self.display.fill(BLACK)
+
+        for point in self.snake:
+            pygame.draw.rect(self.display, ORANGE, [point.x, point.y, BLOCK_SIZE, BLOCK_SIZE])
+            pygame.draw.rect(self.display, YELLOW, [point.x+4, point.y+4, BLOCK_SIZE, BLOCK_SIZE])
+
+        pygame.draw.rect(self.display, RED, pygame.Rect(self.food.x, self.food.y, BLOCK_SIZE, BLOCK_SIZE))
+        self._display_message(f'Your Score : {self.score}', WHITE)
+        pygame.display.update()
+        pygame.display.flip()
+
+    def _display_message(self, message, color, position=None, size=25):
+        if position is None:
+            position = [0, 0]
+        font = pygame.font.SysFont(None, size)
+        msg = font.render(message, True, color)
+        self.display.blit(msg, position)
+
+    def _move(self, action):
+        directions = [Direction.RIGHT, Direction.DOWN, Direction.LEFT, Direction.UP]
+        idx = directions.index(self.direction)
+
+        new_direction = self.direction
+        if action == (0, 1, 0):
+            new_direction = directions[(idx + 1) % len(directions)]
+        elif action == (0, 0, 1):
+            new_direction = directions[(idx - 1) % len(directions)]
+
+        dx, dy = 0, 0
+        match new_direction:
+            case Direction.RIGHT:
+                nx = -BLOCK_SIZE
+                if self.direction != Direction.LEFT:
+                    self.direction = Direction.RIGHT
+                    nx = BLOCK_SIZE
+                dx += nx
+            case Direction.LEFT:
+                nx = BLOCK_SIZE
+                if self.direction != Direction.RIGHT:
+                    self.direction = Direction.LEFT
+                    nx = -BLOCK_SIZE
+                dx += nx
+            case Direction.UP:
+                ny = BLOCK_SIZE
+                if self.direction != Direction.DOWN:
+                    self.direction = Direction.UP
+                    ny = -BLOCK_SIZE
+                dy += ny
+            case Direction.DOWN:
+                ny = -BLOCK_SIZE
+                if self.direction != Direction.UP:
+                    self.direction = Direction.DOWN
+                    ny = BLOCK_SIZE
+                dy += ny
+
+        self.head = Point(self.head.x + dx, self.head.y + dy)
 
     def step(self, action):
-        directions = [(0, -10), (10, 0), (0, 10), (-10, 0)]
-        self.snake_dir = directions[action]
+        self._move(action)
+        self.snake.insert(0, self.head)
 
-        head_x, head_y = self.snake[0]
-        new_head = (head_x + self.snake_dir[0], head_y + self.snake_dir[1])
-
-        # Collision detection
-        if (new_head in self.snake or
-                new_head[0] < 0 or new_head[0] >= self.width or
-                new_head[1] < 0 or new_head[1] >= self.height):
-            self.game_over = True
+        if self._is_collision(self.head):
+            exit_game()
             return self.get_state(), -10, True
 
-        self.snake = [new_head] + self.snake[:-1]
-
-        # Check if food is eaten
-        if new_head == self.food:
-            self.snake.append(self.snake[-1])
-            self.food = self.spawn_food()
+        reward = 0
+        if self.head == self.food:
             self.score += 1
+            self._spawn_food()
             reward = 10
+            self.steps_without_food = 0
         else:
-            reward = 0
+            self.steps_without_food += 1
+            reward -= 0.5
+            self.snake.pop()
+
+        if self.steps_without_food > 200:
+            exit_game()
+            return self.get_state(), -10, True
+
+        if self.render:
+            self._update_frame()
+            self.clock.tick(self.speed)
 
         return self.get_state(), reward, False
-
-    def render(self, screen):
-        screen.fill((0, 0, 0))
-        for part in self.snake:
-            pygame.draw.rect(screen, (0, 255, 0), (*part, 10, 10))
-        pygame.draw.rect(screen, (255, 0, 0), (*self.food, 10, 10))
-        pygame.display.update()
