@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 class QLearning:
     def __init__(self):
-        self.actions = ((1,0,0), (0,1,0), (0,0,1))
+        self.actions = ((1,0,0), (0,1,0), (0,0,1)) # STRAIGHT RIGHT LEFT
         self.q_table = defaultdict(lambda: {a: 0.0 for a in self.actions})
 
     def load_q_table(self):
@@ -15,7 +15,7 @@ class QLearning:
             self.q_table = pickle.load(f)
 
     def select_action(self, state, epsilon=0.1):
-        if random.random() < epsilon:
+        if random.uniform(0,1) < epsilon:
             return random.choice(self.actions)
         return max(self.q_table[state], key=self.q_table[state].get)
 
@@ -27,11 +27,11 @@ class QLearning:
         new_value = old_value + alpha * (reward + gamma * next_max - old_value)
         self.q_table[state][action] = new_value
 
-    def train(self):
+    def train(self, episodes=5000):
         game = SnakeGame()
         epsilon = 0.1
         scores = []
-        for episode in range(10000):
+        for episode in range(episodes):
             game.reset()
             state = game.get_state()
             done = False
@@ -46,9 +46,10 @@ class QLearning:
 
             epsilon = max(0.01, epsilon * 0.995)
             scores.append(game.score)
-            if episode % 100 == 0:
-                print(f'CURRENT EPISODE: {episode}, AVG SCORE: {sum(scores[-100:])/100}')
+            if episode % 1000 == 0:
+                print(f'CURRENT EPISODE: {episode}, AVG SCORE: {sum(scores[-1000:])/1000}')
         print(f'MAX SCORE : {max(scores)}')
+        print(f'NUMBER OF STATES: {len(self.q_table.keys())}')
         plt.plot(scores, label='Scores')
         plt.show(block=True)
 
