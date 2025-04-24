@@ -76,56 +76,36 @@ class SnakeGame:
         direction_u = self.direction == Direction.UP
         direction_d = self.direction == Direction.DOWN
 
-        snake_obstacles = [
+        obstacles = [
             # Straight
-            (pt_l and self._snake_is_collision(pt_l)) or
-            (pt_r and self._snake_is_collision(pt_r)) or
-            (pt_u and self._snake_is_collision(pt_u)) or
-            (pt_d and self._snake_is_collision(pt_d)),
+            (direction_l and self._is_collision(pt_l)) or
+            (direction_r and self._is_collision(pt_r)) or
+            (direction_u and self._is_collision(pt_u)) or
+            (direction_d and self._is_collision(pt_d)),
 
             # Right
-            (pt_l and self._snake_is_collision(pt_u)) or
-            (pt_r and self._snake_is_collision(pt_d)) or
-            (pt_u and self._snake_is_collision(pt_r)) or
-            (pt_d and self._snake_is_collision(pt_l)),
+            (direction_l and self._is_collision(pt_u)) or
+            (direction_r and self._is_collision(pt_d)) or
+            (direction_u and self._is_collision(pt_r)) or
+            (direction_d and self._is_collision(pt_l)),
 
             # Left
-            (pt_l and self._snake_is_collision(pt_d)) or
-            (pt_r and self._snake_is_collision(pt_u)) or
-            (pt_u and self._snake_is_collision(pt_l)) or
-            (pt_d and self._snake_is_collision(pt_r))
-        ]
-
-        edge_obstacles = [
-            # Straight
-            (pt_l and self._edge_is_collision(pt_l)) or
-            (pt_r and self._edge_is_collision(pt_r)) or
-            (pt_u and self._edge_is_collision(pt_u)) or
-            (pt_d and self._edge_is_collision(pt_d)),
-
-            # Right
-            (pt_l and self._edge_is_collision(pt_u)) or
-            (pt_r and self._edge_is_collision(pt_d)) or
-            (pt_u and self._edge_is_collision(pt_r)) or
-            (pt_d and self._edge_is_collision(pt_l)),
-
-            # Left
-            (pt_l and self._edge_is_collision(pt_d)) or
-            (pt_r and self._edge_is_collision(pt_u)) or
-            (pt_u and self._edge_is_collision(pt_l)) or
-            (pt_d and self._edge_is_collision(pt_r))
+            (direction_l and self._is_collision(pt_d)) or
+            (direction_r and self._is_collision(pt_u)) or
+            (direction_u and self._is_collision(pt_l)) or
+            (direction_d and self._is_collision(pt_r))
         ]
 
         direction = [direction_r, direction_d, direction_l, direction_u]
 
         food_location = [
-            self.head.x < self.food.x,
-            self.head.y < self.food.y,
-            self.head.x > self.food.x,
-            self.head.y > self.food.y
+            self.head.x < self.food.x,# RIGHT
+            self.head.y < self.food.y,# DOWN
+            self.head.x > self.food.x,# LEFT
+            self.head.y > self.food.y # UP
         ]
 
-        state = snake_obstacles + direction + food_location + edge_obstacles
+        state = food_location + obstacles + direction
         return tuple(state)
 
     def _snake_is_collision(self, point):
@@ -176,9 +156,9 @@ class SnakeGame:
         idx = directions.index(self.direction)
 
         new_direction = self.direction
-        if action == (0, 1, 0):
+        if action == (0, 1, 0):# RIGHT TURN
             new_direction = directions[(idx + 1) % len(directions)]
-        elif action == (0, 0, 1):
+        elif action == (0, 0, 1):# LEFT TURN
             new_direction = directions[(idx - 1) % len(directions)]
 
         dx, dy = 0, 0
@@ -216,7 +196,7 @@ class SnakeGame:
 
         if self._is_collision(self.head):
             exit_game()
-            return self.get_state(), -10, True
+            return self.get_state(), -100, True
 
         reward = 0
         if self.head == self.food:
@@ -226,7 +206,7 @@ class SnakeGame:
             self.steps_without_food = 0
         else:
             self.steps_without_food += 1
-            reward -= 0.5
+            reward = -0.1
             self.snake.pop()
 
         if self.steps_without_food > 200:
